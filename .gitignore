@@ -1,0 +1,40 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.pytest_cache/
+.mypy_cache/
+
+# Virtual environments
+.venv/
+venv/
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+frontend/.env
+
+# Build and runtime outputs
+outputs/
+train/
+*.log
+
+# Local tool artifacts
+.playwright-mcp/
+.claude/
+
+# Agent coordination / local instructions
+CLAUDE.md
+codex.md
+gemini.md
+recommendations.md
+react_migration_plan.md
+react_runbook.md
+
+# OS / editor
+.DS_Store
+Thumbs.db
+
+# Local screenshots and ad-hoc artifacts
+ss.png
