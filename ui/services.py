@@ -401,7 +401,7 @@ def start_corpus_training(
                 return
 
             # Build dataset and model (still "config" stage visually)
-            from nano_llm.data.dataset import build_dataloader, build_dataset
+            from nano_llm.data.dataset import build_train_validation_loaders, build_dataset
             from nano_llm.model.transformer import NanoLLM
             from nano_llm.training.callbacks import (
                 BaseCallback,
@@ -418,7 +418,7 @@ def start_corpus_training(
                 state.training_status_text = "Prepared dataset is empty. Add more data."
                 return
 
-            dataloader = build_dataloader(dataset, state.batch_size, num_workers=0)
+            dataloader, validation_loader = build_train_validation_loaders(dataset, state.batch_size)
             state.model_config.vocab_size = state.tokenizer.vocab_size()
             state.model = NanoLLM.from_config(state.model_config)
 
@@ -434,7 +434,7 @@ def start_corpus_training(
                 def on_epoch_end(self, epoch: int, mean_loss: float, trainer) -> None:
                     state.training_current_epoch = epoch
                     state.training_status_text = (
-                        f"Running: Epoch {epoch}/{effective_epochs} | Mean Loss: {mean_loss:.4f}"
+                        f"Running: Epoch {epoch}/{effective_epochs} | Train: {mean_loss:.4f} | Validation: {trainer.validation_loss:.4f}"
                     )
 
                 def on_train_end(self, trainer) -> None:
@@ -461,6 +461,7 @@ def start_corpus_training(
                     sample_every_n_epochs=max(1, min(int(epochs), 4)) if epoch_mode != "auto" else 4,
                 ),
                 tokenizer=state.tokenizer,
+                validation_dataloader=validation_loader,
                 callbacks=[gradio_cb, sample_cb, log_cb, status_cb],
                 device=state.device,
             )

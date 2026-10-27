@@ -4,7 +4,7 @@ from pathlib import Path
 
 import numpy as np
 import torch
-from torch.utils.data import Dataset, DataLoader
+from torch.utils.data import Dataset, DataLoader, Subset
 
 logger = logging.getLogger(__name__)
 
@@ -107,5 +107,17 @@ def build_dataloader(
         shuffle=shuffle,
         num_workers=num_workers,
         pin_memory=torch.cuda.is_available(),
-        drop_last=True,
+        drop_last=False,
     )
+
+
+def build_train_validation_loaders(dataset, batch_size, validation_fraction=0.1):
+    """Contiguous token-block holdout; targets do not cross split boundaries."""
+    if len(dataset) < 2 or not 0 < validation_fraction < 1:
+        raise ValueError("Need at least two sequences and a validation fraction between 0 and 1")
+    n_validation = max(1, int(len(dataset) * validation_fraction))
+    boundary = len(dataset) - n_validation
+    train = Subset(dataset, range(boundary))
+    validation = Subset(dataset, range(boundary, len(dataset)))
+    return (build_dataloader(train, batch_size, shuffle=True),
+            build_dataloader(validation, batch_size, shuffle=False))
