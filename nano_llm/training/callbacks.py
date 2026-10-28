@@ -50,6 +50,7 @@ class LossLoggerCallback(BaseCallback):
             "epoch": epoch,
             "step": "epoch_end",
             "mean_loss": round(mean_loss, 6),
+            "validation_loss": trainer.validation_loss,
             "timestamp": time.time(),
         }
         with open(self.log_path, "a", encoding="utf-8") as f:

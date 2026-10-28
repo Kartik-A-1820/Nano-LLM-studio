@@ -80,12 +80,12 @@ def main():
     )
 
     # 4. Build dataset
-    from nano_llm.data.dataset import build_dataset, build_dataloader
+    from nano_llm.data.dataset import build_dataset, build_train_validation_loaders
     dataset = build_dataset(all_chunks, tok, args.seq_len, Path("outputs/train_data.bin"))
     if len(dataset) == 0:
         logger.error("Dataset is empty — not enough text for even one sample.")
         sys.exit(1)
-    dataloader = build_dataloader(dataset, batch_size, num_workers=0)
+    dataloader, validation_loader = build_train_validation_loaders(dataset, batch_size)
 
     # 5. Build model
     from nano_llm.model.transformer import NanoLLM
@@ -115,6 +115,7 @@ def main():
         dataloader=dataloader,
         config=trainer_cfg,
         tokenizer=tok,
+        validation_dataloader=validation_loader,
         callbacks=[sample_cb, log_cb],
     )
     trainer.train()

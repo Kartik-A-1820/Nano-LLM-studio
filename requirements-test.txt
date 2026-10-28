@@ -1,0 +1,3 @@
+pytest>=8,<10
+numpy>=1.26,<3
+# Install a matching CPU/CUDA PyTorch build separately.
