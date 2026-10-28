@@ -97,3 +97,56 @@ def test_real_transformer_train_validation_smoke(tmp_path):
     assert trainer.global_step==1
     assert trainer.validation_loss>0
     assert (tmp_path/'best.pt').is_file()
+
+def test_mid_epoch_stop_rolls_back_before_replay(tmp_path):
+    torch.manual_seed(321)
+    full=make(tmp_path/'full-mid',epochs=3)
+    full.train()
+    torch.manual_seed(321)
+    stopped=make(tmp_path/'stop-mid',epochs=3)
+    class StopDuringEpoch:
+        def on_train_start(self,*a):pass
+        def on_train_end(self,*a):pass
+        def on_epoch_end(self,*a):pass
+        def on_step_end(self,step,loss,trainer):
+            if step==3:trainer.stop()
+    stopped.callbacks=[StopDuringEpoch()]
+    stopped.train()
+    checkpoint=torch.load(tmp_path/'stop-mid'/'last.pt',weights_only=True)
+    assert checkpoint['epoch']==1 and checkpoint['global_step']==2
+    resumed=make(tmp_path/'stop-mid',epochs=3)
+    resumed.load_checkpoint(tmp_path/'stop-mid'/'last.pt')
+    resumed.train()
+    assert resumed.global_step==full.global_step
+    assert resumed.scheduler.state_dict()==full.scheduler.state_dict()
+    assert torch.equal(resumed.model.weight,full.model.weight)
+    assert not (tmp_path/'stop-mid'/'.epoch-boundary.state').exists()
+
+def test_best_resume_preserves_sampling_callback_rng(tmp_path):
+    class SamplingCallback:
+        def __init__(self,stop_after_first=False):self.stop_after_first=stop_after_first
+        def on_train_start(self,*a):pass
+        def on_train_end(self,*a):pass
+        def on_step_end(self,*a):pass
+        def on_epoch_end(self,epoch,loss,trainer):
+            torch.rand(13)
+            if epoch==1 and self.stop_after_first:trainer.stop()
+    def setup(directory,stop_after_first=False):
+        trainer=make(directory,epochs=3,validation=True)
+        trainer.dataloader=DataLoader(trainer.dataloader.dataset,batch_size=1,shuffle=True)
+        trainer.callbacks=[SamplingCallback(stop_after_first)]
+        trainer.evaluate=lambda:float(trainer.current_epoch)
+        return trainer
+    torch.manual_seed(123)
+    full=setup(tmp_path/'rng-full')
+    full.train()
+    expected_rng=torch.get_rng_state().clone()
+    torch.manual_seed(123)
+    stopped=setup(tmp_path/'rng-stop',True)
+    stopped.train()
+    resumed=setup(tmp_path/'rng-stop')
+    resumed.load_checkpoint(tmp_path/'rng-stop'/'best.pt')
+    resumed.train()
+    assert resumed.global_step==full.global_step
+    assert torch.equal(resumed.model.weight,full.model.weight)
+    assert torch.equal(torch.get_rng_state(),expected_rng)

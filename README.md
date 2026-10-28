@@ -148,7 +148,7 @@ held-out text while learning its vocabulary.
 - Checkpoints include the scheduler, epoch, validation-selection state, Torch
   RNG state, and a schedule signature. `Trainer.load_checkpoint()` resumes at
   the next epoch with the same planned epochs/loader/accumulation configuration.
-  Interrupted partial epochs repeat from their boundary. Exact replay requires
+  Interrupted partial epochs restore an on-disk model/optimizer/scheduler/RNG boundary snapshot before replaying. This discards partial-epoch updates and avoids a second VRAM copy. Selected checkpoints are saved after sampling callbacks so their RNG state matches the next epoch. Exact replay requires
   unchanged data and deterministic loaders; custom sampler generators and data
   worker RNG are not serialized. Older checkpoints lacking the new state are
   not supported for exact training resume; model-only inference is separate.

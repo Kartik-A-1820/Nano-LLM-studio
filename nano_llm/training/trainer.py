@@ -106,48 +106,49 @@ class Trainer:
     def train(self) -> None:
         for cb in self.callbacks:
             cb.on_train_start(self)
-
-        for epoch in range(self.current_epoch + 1, self.config.epochs + 1):
-            if self._stop_flag.is_set():
-                logger.info("Training stopped by user.")
-                break
-            self.current_epoch = epoch
-            mean_loss = self._train_epoch(epoch)
-            logger.info(f"Epoch {epoch}/{self.config.epochs}  loss={mean_loss:.4f}")
-
-            if self._stop_flag.is_set():
-                # Resume is at an epoch boundary; repeat this partial epoch.
-                self.current_epoch = epoch - 1
-                self.save_checkpoint(epoch - 1, filename=self.config.last_checkpoint_name)
-                break
-            self.validation_loss = self.evaluate() if self.validation_dataloader is not None else None
-            if self.validation_loss is not None:
-                if self.validation_loss < self.best_mean_loss - self.config.min_loss_delta:
-                    self.best_mean_loss = self.validation_loss
-                    self.no_improve_count = 0
+        boundary_name = ".epoch-boundary.state"
+        boundary_path = self.config.checkpoint_dir / boundary_name
+        try:
+            for epoch in range(self.current_epoch + 1, self.config.epochs + 1):
+                if self._stop_flag.is_set():
+                    logger.info("Training stopped by user.")
+                    break
+                # A disk snapshot avoids another model/optimizer copy in VRAM.
+                # On interruption, roll back actual state before replaying batches.
+                self.save_checkpoint(epoch - 1, filename=boundary_name)
+                self.current_epoch = epoch
+                mean_loss = self._train_epoch(epoch)
+                logger.info(f"Epoch {epoch}/{self.config.epochs} loss={mean_loss:.4f}")
+                if self._stop_flag.is_set():
+                    self.load_checkpoint(boundary_path)
+                    self.save_checkpoint(self.current_epoch, filename=self.config.last_checkpoint_name)
+                    break
+                self.validation_loss = self.evaluate() if self.validation_dataloader is not None else None
+                improved = False
+                if self.validation_loss is not None:
+                    improved = self.validation_loss < self.best_mean_loss - self.config.min_loss_delta
+                    if improved:
+                        self.best_mean_loss = self.validation_loss
+                        self.no_improve_count = 0
+                    else:
+                        self.no_improve_count += 1
+                for cb in self.callbacks:
+                    cb.on_epoch_end(epoch, mean_loss, self)
+                # Sampling callbacks consume RNG; selected checkpoints must capture
+                # the same state that will start the next uninterrupted epoch.
+                if improved:
                     self.save_checkpoint(epoch, filename=self.config.best_checkpoint_name)
-                else:
-                    self.no_improve_count += 1
-
-            for cb in self.callbacks:
-                cb.on_epoch_end(epoch, mean_loss, self)
-
-            if epoch % self.config.save_every_n_epochs == 0:
-                self.save_checkpoint(epoch, filename=self.config.last_checkpoint_name)
-
-            if (
-                self.validation_dataloader is not None
-                and self.config.early_stopping_patience is not None
-                and self.no_improve_count >= self.config.early_stopping_patience
-            ):
-                logger.info(
-                    "Early stopping triggered after %s epochs without sufficient improvement.",
-                    self.no_improve_count,
-                )
-                break
-
-        if self.current_epoch > 0:
-            self.save_checkpoint(self.current_epoch, filename=self.config.last_checkpoint_name)
+                if epoch % self.config.save_every_n_epochs == 0:
+                    self.save_checkpoint(epoch, filename=self.config.last_checkpoint_name)
+                if (self.validation_dataloader is not None
+                        and self.config.early_stopping_patience is not None
+                        and self.no_improve_count >= self.config.early_stopping_patience):
+                    logger.info("Validation plateau reached; stopping training.")
+                    break
+            if self.current_epoch > 0:
+                self.save_checkpoint(self.current_epoch, filename=self.config.last_checkpoint_name)
+        finally:
+            boundary_path.unlink(missing_ok=True)
         for cb in self.callbacks:
             cb.on_train_end(self)
 
