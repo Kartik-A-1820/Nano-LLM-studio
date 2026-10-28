@@ -2,25 +2,25 @@
 
 Nano-LLM Studio is a local training workbench for small language models with a React frontend and a FastAPI backend.
 
-The product flow is intentionally simple:
+The workbench has three stages:
 
 1. `Data`  
-   Build a training library from uploads or free public crawlers.
+   Build a training corpus from uploads or supported web collectors.
 2. `Train`  
-   Train on the prepared corpus or run live training on streaming crawler data.
+   Train on a prepared corpus or experiment with streaming crawler data.
 3. `Inference`  
-   Chat with the trained model and compare `best.pt` / `last.pt` checkpoints.
+   Generate text from trained models and compare checkpoint behavior.
 
 ## Current Stack
 
 - Frontend: React + Vite + TypeScript
 - Backend: FastAPI
 - Core training/runtime: PyTorch
-- Tokenizer: SentencePiece-based BPE pipeline
+- Tokenizer: byte-level BPE with a SentencePiece training path and a Python fallback
 
 ## Supported Data Sources
 
-The app supports free, open sources with no API key requirement:
+Collectors are implemented for the sources below. Availability and content reuse terms depend on the source; collection support is not a blanket license to redistribute the text:
 
 - Wikipedia
 - Project Gutenberg
@@ -28,7 +28,7 @@ The app supports free, open sources with no API key requirement:
 - Archive.org
 - RSS feeds
 
-For initial training quality, the default starter mix is:
+The default starter mix uses:
 
 - Wikipedia
 - Gutenberg
@@ -61,33 +61,48 @@ train/        Local corpus storage and prepared training assets
 outputs/      Checkpoints, tokenizer assets, runtime outputs
 ```
 
-## Local Setup
+## Try the CPU training checks
 
-### Backend
+Use Python 3.11 and a separate environment:
 
-```powershell
-uv venv
-.\.venv\Scripts\Activate.ps1
-uv pip install -r requirements.txt
+```bash
+git clone https://github.com/Kartik-A-1820/Nano-LLM-studio.git
+cd Nano-LLM-studio
+python -m venv .venv
+```
+
+Activate with `source .venv/bin/activate` on Linux/macOS or `.venv\Scripts\Activate.ps1` in PowerShell:
+
+```bash
+python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+python -m pip install -r requirements-test.txt
+python -m pytest -q tests
+```
+
+These checks exercise small training/resume cases without downloading pretrained models. They do not demonstrate useful language-model quality. For GPU work, choose a compatible PyTorch build in a separate environment.
+
+## Run the workbench
+
+In the activated environment, from the repository root:
+
+```bash
+python -m pip install -r requirements.txt
 python -m backend.run
 ```
 
-Backend runs on:
+The API listens on `http://127.0.0.1:8000`. In another terminal, with Node.js and npm installed:
 
-- `http://127.0.0.1:8000`
-
-### Frontend
-
-```powershell
+```bash
 cd frontend
-copy .env.example .env
-cmd.exe /c npm install
-cmd.exe /c npm run dev
+npm ci
+npm run dev
 ```
 
-Frontend runs on:
+Before launching the frontend, copy `frontend/.env.example` to `frontend/.env`. Its `VITE_API_BASE_URL` should match the backend. Open `http://127.0.0.1:5173`.
 
-- `http://127.0.0.1:5173`
+For a first UI experiment, upload a small redistributable text corpus, finalize it, train a short corpus run, and inspect separate training/validation losses before generating text. At least two complete token sequences are required; tiny or empty corpora fail explicitly. A small model trained briefly should not be expected to behave like an instruction-tuned assistant.
+
+Runtime corpora and checkpoints live under `train/` and `outputs/`. Keep separate experiment directories when comparing runs. The app is intended for trusted local use; do not expose its data/reset/training API as a public service.
 
 ## API Surface
 
@@ -170,3 +185,9 @@ end-to-end compatibility.
 
 References: [PyTorch AMP accumulation](https://docs.pytorch.org/docs/stable/notes/amp_examples.html),
 [checkpoint guidance](https://docs.pytorch.org/tutorials/beginner/saving_loading_models).
+
+## Contribute
+
+See [CONTRIBUTING.md](CONTRIBUTING.md). Focused contributions could improve corpus deduplication, document-disjoint evaluation, tokenizer tests, crawler fixtures, or UI/backend error handling. Record source provenance and exact package versions for experiments; Python requirements are not locked.
+
+No standalone LICENSE file is included. Check source-data and repository reuse terms separately.
